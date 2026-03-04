@@ -44,7 +44,7 @@ def Video_Process(tx, rx):
         cv2.waitKey(1)
         send_msg = f"{cx}, {cy}\n"
         if isConnected:
-            print(send_msg)
+            # print(send_msg)
             tx.send(send_msg)
 
 
