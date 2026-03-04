@@ -1,5 +1,6 @@
 import socket
 import cv2
+import struct
 from multiprocessing import Process, Pipe
 
 send_pipe1, recv_pipe1 = Pipe()
@@ -42,13 +43,24 @@ def Video_Process(tx, rx):
                     cv2.drawContours(frame, cnt, -1, (0, 255, 0), 3)
         cv2.imshow("image", frame)
         cv2.waitKey(1)
-        send_msg = f"{cx}, {cy}\n"
+        # send_msg = f"{cx}, {cy}\n"
+        send_msg = [cx, cy]
         if isConnected:
             # print(send_msg)
             tx.send(send_msg)
 
 
-def Send_Process(tx, rx):
+def _send_by_firewater(data_list, socket):
+    send_msg = ",".join(str(x) for x in data_list) + "\n"
+    socket.send(send_msg.encode("utf8"))
+
+def _send_by_justfloat(data_list, socket):
+    format_string = '<' + 'f' * len(data_list)
+    packed_data = struct.pack(format_string, *data_list)
+    tail = b'\x00\x00\x80\x7f'
+    socket.send(packed_data + tail)
+
+def Send_Process(tx, rx, method="justfloat"):
     
     isConnected = False
     connect_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -61,7 +73,15 @@ def Send_Process(tx, rx):
         while True:
             msg = rx.recv()
             try:
-                server_socket.send(msg.encode("utf8"))
+                if method == "firewater":
+                    _send_by_firewater(msg, server_socket)
+                elif method == "justfloat":
+                    _send_by_justfloat(msg, server_socket)
+                else:
+                    raise ValueError("发送方式不正确")
+            except ValueError as err:
+                print(err)
+                break
             except:
                 print("客户端断开连接")
                 isConnected = False
