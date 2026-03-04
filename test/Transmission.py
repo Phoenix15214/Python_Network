@@ -49,10 +49,11 @@ def Video_Process(tx, rx):
 
 
 def Send_Process(tx, rx):
-    while True:
-        isConnected = False
-        connect_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        connect_socket.bind(("", 11451))
+    
+    isConnected = False
+    connect_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connect_socket.bind(("", 11451))
+    while True:    
         connect_socket.listen(3)
         server_socket, client_addr = connect_socket.accept()
         isConnected = True
