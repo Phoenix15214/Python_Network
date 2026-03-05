@@ -4,8 +4,7 @@ import struct
 from threading import Thread
 from multiprocessing import Process, Pipe
 
-send_pipe1, recv_pipe1 = Pipe()
-send_pipe2, recv_pipe2 = Pipe()
+pipe1, pipe2 = Pipe()
 
 def Parse_Input(msg):
     start_flag = ":"
@@ -21,15 +20,15 @@ def Parse_Input(msg):
     value = msg[content_pos:end_pos]
     return command, value
 
-def Video_Process(tx, rx):
+def Video_Process(conn):
     cap = cv2.VideoCapture(0)
     isConnected = False
     if not cap.isOpened():
         print("无法打开摄像头")
         exit()
     while True:
-        if rx.poll():
-            msg = rx.recv()
+        if conn.poll():
+            msg = conn.recv()
             if type(msg) == bool:
                 isConnected = msg
             else:
@@ -69,7 +68,7 @@ def Video_Process(tx, rx):
         send_msg = [cx, cy]
         if isConnected:
             # print(send_msg)
-            tx.send(send_msg)
+            conn.send(send_msg)
 
 
 def _send_by_firewater(data_list, socket):
@@ -82,9 +81,9 @@ def _send_by_justfloat(data_list, socket):
     tail = b'\x00\x00\x80\x7f'
     socket.send(packed_data + tail)
 
-def _send_thread(tx, rx, method, socket):
+def _send_thread(conn, method, socket):
     while True:
-            msg = rx.recv()
+            msg = conn.recv()
             try:
                 if method == "firewater":
                     _send_by_firewater(msg, socket)
@@ -93,20 +92,20 @@ def _send_thread(tx, rx, method, socket):
             except:
                 print("客户端断开连接")
                 isConnected = False
-                tx.send(isConnected)
+                conn.send(isConnected)
                 break
 
-def _recv_thread(tx, rx, method, socket):
+def _recv_thread(conn, socket):
     while True:
         try:
             msg = socket.recv(1024).decode("utf8")
             if len(msg) == 0:
                 break
-            tx.send(msg)
+            conn.send(msg)
         except:
             break
 
-def Send_Process(tx, rx, method="justfloat"):
+def Send_Process(conn, method="justfloat"):
     if method not in ("justfloat", "firewater"):
         print("发送方式不正确")
         method = "justfloat"
@@ -119,16 +118,16 @@ def Send_Process(tx, rx, method="justfloat"):
         server_socket, client_addr = connect_socket.accept()
         isConnected = True
         print("客户端已连接")
-        tx.send(isConnected)
-        t1 = Thread(target=_send_thread, args=(tx, rx, method, server_socket))
-        t2 = Thread(target=_recv_thread, args=(tx, rx, method, server_socket))
+        conn.send(isConnected)
+        t1 = Thread(target=_send_thread, args=(conn, method, server_socket))
+        t2 = Thread(target=_recv_thread, args=(conn, server_socket))
         t1.start()
         t2.start()
         
 
 if __name__ == "__main__":
-    p1 = Process(target=Video_Process, args=(send_pipe1, recv_pipe2))
-    p2 = Process(target=Send_Process, args=(send_pipe2, recv_pipe1))
+    p1 = Process(target=Video_Process, args=(pipe1, ))
+    p2 = Process(target=Send_Process, args=(pipe2, ))
 
     p1.start()
     p2.start()
