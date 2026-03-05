@@ -1,6 +1,7 @@
 import socket
 import cv2
 import struct
+from threading import Thread
 from multiprocessing import Process, Pipe
 
 send_pipe1, recv_pipe1 = Pipe()
@@ -14,7 +15,11 @@ def Video_Process(tx, rx):
         exit()
     while True:
         if rx.poll():
-            isConnected = rx.recv()
+            msg = rx.recv()
+            if type(msg) == bool:
+                isConnected = msg
+            else:
+                print(msg)
         ret, frame = cap.read()
         if not ret:
             break
@@ -34,15 +39,15 @@ def Video_Process(tx, rx):
                 cx = int(m['m10'] / m['m00'])
                 cy = int(m['m01'] / m['m00'])
                 # 绘制中心点
-                cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
-                cv2.putText(frame, f'Avg X: {cx}', (10, 70),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-                cv2.putText(frame, f'contour: {len(contours)}', (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-                for cnt in contours:
-                    cv2.drawContours(frame, cnt, -1, (0, 255, 0), 3)
-        cv2.imshow("image", frame)
-        cv2.waitKey(1)
+                # cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
+                # cv2.putText(frame, f'Avg X: {cx}', (10, 70),
+                #             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+                # cv2.putText(frame, f'contour: {len(contours)}', (10, 30),
+                #             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+                # for cnt in contours:
+                #     cv2.drawContours(frame, cnt, -1, (0, 255, 0), 3)
+        # cv2.imshow("image", frame)
+        # cv2.waitKey(1)
         # send_msg = f"{cx}, {cy}\n"
         send_msg = [cx, cy]
         if isConnected:
@@ -60,8 +65,35 @@ def _send_by_justfloat(data_list, socket):
     tail = b'\x00\x00\x80\x7f'
     socket.send(packed_data + tail)
 
+def _send_thread(tx, rx, method, socket):
+    while True:
+            msg = rx.recv()
+            try:
+                if method == "firewater":
+                    _send_by_firewater(msg, socket)
+                elif method == "justfloat":
+                    _send_by_justfloat(msg, socket)
+            except:
+                print("客户端断开连接")
+                isConnected = False
+                tx.send(isConnected)
+                break
+
+def _recv_thread(tx, rx, method, socket):
+    while True:
+        try:
+            msg = socket.recv(1024).decode("utf8")
+            if len(msg) == 0:
+                break
+            tx.send(msg)
+        except:
+            break
+
 def Send_Process(tx, rx, method="justfloat"):
-    
+    if method not in ("justfloat", "firewater"):
+        print("发送方式不正确")
+        method = "justfloat"
+        print("自动更改格式为justfloat")
     isConnected = False
     connect_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     connect_socket.bind(("", 11451))
@@ -69,24 +101,13 @@ def Send_Process(tx, rx, method="justfloat"):
         connect_socket.listen(3)
         server_socket, client_addr = connect_socket.accept()
         isConnected = True
+        print("客户端已连接")
         tx.send(isConnected)
-        while True:
-            msg = rx.recv()
-            try:
-                if method == "firewater":
-                    _send_by_firewater(msg, server_socket)
-                elif method == "justfloat":
-                    _send_by_justfloat(msg, server_socket)
-                else:
-                    raise ValueError("发送方式不正确")
-            except ValueError as err:
-                print(err)
-                break
-            except:
-                print("客户端断开连接")
-                isConnected = False
-                tx.send(isConnected)
-                break
+        t1 = Thread(target=_send_thread, args=(tx, rx, method, server_socket))
+        t2 = Thread(target=_recv_thread, args=(tx, rx, method, server_socket))
+        t1.start()
+        t2.start()
+        
 
 if __name__ == "__main__":
     p1 = Process(target=Video_Process, args=(send_pipe1, recv_pipe2))
