@@ -7,6 +7,20 @@ from multiprocessing import Process, Pipe
 send_pipe1, recv_pipe1 = Pipe()
 send_pipe2, recv_pipe2 = Pipe()
 
+def Parse_Input(msg):
+    start_flag = ":"
+    end_flag = "\n"
+    start_pos = msg.find(start_flag)
+    content_pos = start_pos + len(start_flag)
+    end_pos = msg.find(end_flag)
+    if start_pos == -1 or end_pos == -1:
+        return None, None
+    if end_pos <= start_pos:
+        return None, None
+    command = msg[0:start_pos]
+    value = msg[content_pos:end_pos]
+    return command, value
+
 def Video_Process(tx, rx):
     cap = cv2.VideoCapture(0)
     isConnected = False
@@ -19,7 +33,10 @@ def Video_Process(tx, rx):
             if type(msg) == bool:
                 isConnected = msg
             else:
-                print(msg)
+                command, value = Parse_Input(msg)
+                if command is not None and value is not None:
+                    print(f"command为:{command}")
+                    print(f"value为:{value}")
         ret, frame = cap.read()
         if not ret:
             break
